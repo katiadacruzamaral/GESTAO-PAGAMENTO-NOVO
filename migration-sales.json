@@ -1,0 +1,14 @@
+{
+  "name": "gestao-folha-compartilhada",
+  "version": 1,
+  "purpose": "Migração do armazenamento local para o estado compartilhado do Supabase",
+  "sourceStorageKey": "gestaoHorasData",
+  "targetTable": "public.app_state",
+  "targetRow": "main",
+  "instructions": [
+    "Abra a aplicação original no navegador que contém os dados locais.",
+    "Exporte ou copie o conteúdo de localStorage.gestaoHorasData.",
+    "Cole o objeto no campo payload da linha main em public.app_state.",
+    "Atualize a coluna updated_at com o horário da migração."
+  ]
+}

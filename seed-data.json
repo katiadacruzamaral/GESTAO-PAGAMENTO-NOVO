@@ -1,0 +1,25 @@
+{
+  "id": "main",
+  "payload": {
+    "catalogs": {
+      "branches": ["Filial 1", "Filial 2", "Filial 3", "Filial 4"],
+      "roles": ["Aux. Administrativo I", "Monitoria"],
+      "roleSalaries": {"Aux. Administrativo I": "2500,00", "Monitoria": "18,00"},
+      "classes": ["Aula Turma", "Monitoria"],
+      "discounts": ["INSS", "Vale Transporte"],
+      "entries": ["Salário Mensalista", "Comissão", "DSR"],
+      "contractTypes": ["Horista", "Mensalista"],
+      "holidays": [],
+      "inss": {"year": 2026, "ceiling": "8475,55", "bands": []}
+    },
+    "employees": [],
+    "entries": [],
+    "month": 0,
+    "year": 2026,
+    "years": [2026],
+    "activeBranch": "Filial 1",
+    "controlHours": {},
+    "inssSnapshots": {}
+  },
+  "updated_at": "2026-01-01T00:00:00Z"
+}
