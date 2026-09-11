@@ -67,14 +67,21 @@
   #monthlyPrintArea { color: #111; font-family: Arial, sans-serif; }
   #monthlyPrintArea h1 { font-size: 20px; margin: 0 0 4px; }
   #monthlyPrintArea .print-meta { font-size: 11px; color: #444; margin-bottom: 14px; }
-  #monthlyPrintArea table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  #monthlyPrintArea table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
   #monthlyPrintArea th, #monthlyPrintArea td { border: 1px solid #999; padding: 5px 6px; text-align: left; vertical-align: top; }
   #monthlyPrintArea th { background: #e9eef5 !important; font-weight: 700; }
-  #monthlyPrintArea td.value { text-align: right; white-space: nowrap; }
-  #monthlyPrintArea tr.section td { background: #dce6f1 !important; font-weight: 700; }
-  #monthlyPrintArea tr.total td { background: #e7f4ee !important; font-weight: 700; }
+  #monthlyPrintArea td.value, #monthlyPrintArea td.base { text-align: right; white-space: nowrap; }
+  #monthlyPrintArea td.negative { color: #a11; }
+  #monthlyPrintArea td.positive { color: #075; }
+  #monthlyPrintArea .print-entries th:nth-child(1), #monthlyPrintArea .print-entries td:nth-child(1) { width: 8%; }
+  #monthlyPrintArea .print-entries th:nth-child(6), #monthlyPrintArea .print-entries td:nth-child(6) { width: 11%; }
+  #monthlyPrintArea .print-entries th:nth-child(7), #monthlyPrintArea .print-entries td:nth-child(7) { width: 12%; }
+  #monthlyPrintArea .print-section-title { font-size: 13px; margin: 14px 0 5px; }
+  #monthlyPrintArea .print-category { width: 55%; font-size: 9.5px; }
   #monthlyPrintArea .print-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
   #monthlyPrintArea .print-summary div { border: 1px solid #999; padding: 7px; font-size: 11px; }
+  #monthlyPrintArea thead { display: table-header-group; }
+  #monthlyPrintArea tr { page-break-inside: avoid; }
 }
 #monthlyPrintArea { display: none; }
 </style></style></head>
@@ -280,11 +287,16 @@ function renderMonthlyBoard(){
 }
 function printEscape(value){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function printMonthlyEntries(){
-  const list=data.entries.filter(x=>samePeriod(x)).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.employee||'').localeCompare(String(b.employee||''),'pt-BR'));
-  const rows=list.map(x=>{const kind=entryKind(x), isDiscount=kind==='discount', detail=kind==='hours'?(x.classType||'Horas'):(x.detail||'—');const value=calculatedValue(x);return `<tr><td>${printEscape(x.date?new Date(x.date+'T00:00:00').toLocaleDateString('pt-BR'):'—')}</td><td>${printEscape(x.employee||'—')}</td><td>${printEscape(x.branch||'—')}</td><td>${kind==='hours'?'Horas':kind==='addition'?'Receita':'Despesa / desconto'}</td><td>${printEscape(detail)}</td><td class="value" style="color:${isDiscount?'#a11':'#075'}">${isDiscount?'− ':''}${money(value)}</td><td>${printEscape(x.note||'')}</td></tr>`}).join('');
+  const list=data.entries.filter(x=>samePeriod(x)).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.employee||'').localeCompare(String(b.employee||''),'pt-BR')||String(a.branch||'').localeCompare(String(b.branch||''),'pt-BR'));
+  const kindLabel=x=>entryKind(x)==='hours'?'Receita / horas':entryKind(x)==='addition'?'Receita':'Despesa / desconto';
+  const detailLabel=x=>entryKind(x)==='hours'?(x.classType||'Horas'):(x.detail||'Sem categoria');
+  const baseLabel=x=>entryKind(x)==='hours'?(parseHours(x.hours).toLocaleString('pt-BR',{minimumFractionDigits:2})+' h'):(x.amount!==undefined&&String(x.amount).trim()!==''?money(parseMoney(x.amount)):'Automático');
+  const rows=list.map(x=>{const kind=entryKind(x), isDiscount=kind==='discount', detail=detailLabel(x), value=calculatedValue(x);return `<tr><td>${printEscape(x.date?new Date(x.date+'T00:00:00').toLocaleDateString('pt-BR'):'Não informada')}</td><td>${printEscape(x.employee||'Não informado')}</td><td>${printEscape(x.branch||'Não informada')}</td><td>${printEscape(kindLabel(x))}</td><td>${printEscape(detail)}</td><td class="base">${printEscape(baseLabel(x))}</td><td class="value ${isDiscount?'negative':'positive'}">${isDiscount?'− ':''}${money(value)}</td><td>${printEscape(x.note||'—')}</td></tr>`}).join('');
   const totalEntries=list.filter(x=>entryKind(x)!=='discount').reduce((sum,x)=>sum+calculatedValue(x),0), totalDiscounts=list.filter(x=>entryKind(x)==='discount').reduce((sum,x)=>sum+calculatedValue(x),0), result=totalEntries-totalDiscounts;
+  const categoryTotals={};list.forEach(x=>{const key=`${kindLabel(x)} — ${detailLabel(x)}`;categoryTotals[key]=(categoryTotals[key]||0)+(entryKind(x)==='discount'?-1:1)*calculatedValue(x)});
+  const categoryRows=Object.entries(categoryTotals).sort(([a],[b])=>a.localeCompare(b,'pt-BR')).map(([label,total])=>`<tr><td>${printEscape(label)}</td><td class="value ${total<0?'negative':'positive'}">${total<0?'− ':''}${money(Math.abs(total))}</td></tr>`).join('');
   const area=document.getElementById('monthlyPrintArea');
-  area.innerHTML=`<h1>Impressão dos lançamentos mensais</h1><div class="print-meta"><strong>Período:</strong> ${printEscape(months[data.month])} / ${Number(data.year)||2026} &nbsp; | &nbsp; <strong>Filial:</strong> ${printEscape(data.activeBranch||'Todas')} &nbsp; | &nbsp; <strong>Emissão:</strong> ${new Date().toLocaleString('pt-BR')}</div><table><thead><tr><th>Data</th><th>Funcionário</th><th>Filial</th><th>Tipo</th><th>Categoria / detalhe</th><th>Valor</th><th>Observação</th></tr></thead><tbody>${rows||'<tr><td colspan="7">Nenhum lançamento registrado no período.</td></tr>'}</tbody></table><div class="print-summary"><div><strong>Receitas / horas:</strong><br>${money(totalEntries)}</div><div><strong>Despesas / descontos:</strong><br>${money(totalDiscounts)}</div><div><strong>Resultado do mês:</strong><br>${money(result)}</div></div>`;
+  area.innerHTML=`<h1>Relatório detalhado de lançamentos mensais</h1><div class="print-meta"><strong>Período:</strong> ${printEscape(months[data.month])} / ${Number(data.year)||2026} &nbsp; | &nbsp; <strong>Filial selecionada:</strong> ${printEscape(data.activeBranch||'Todas')} &nbsp; | &nbsp; <strong>Emissão:</strong> ${new Date().toLocaleString('pt-BR')}<br><strong>Critério:</strong> todos os lançamentos cadastrados no período selecionado</div><table class="print-entries"><thead><tr><th>Data</th><th>Funcionário</th><th>Filial</th><th>Tipo</th><th>Categoria / detalhe</th><th>Base / quantidade</th><th>Valor calculado</th><th>Observação</th></tr></thead><tbody>${rows||'<tr><td colspan="8">Nenhum lançamento registrado no período.</td></tr>'}</tbody></table><h2 class="print-section-title">Totais por categoria</h2><table class="print-category"><thead><tr><th>Tipo e categoria</th><th>Total</th></tr></thead><tbody>${categoryRows||'<tr><td colspan="2">Nenhuma categoria no período.</td></tr>'}</tbody></table><div class="print-summary"><div><strong>Receitas / horas:</strong><br>${money(totalEntries)}</div><div><strong>Despesas / descontos:</strong><br>${money(totalDiscounts)}</div><div><strong>Resultado líquido:</strong><br>${money(result)}</div></div>`;
   document.body.classList.add('printing-monthly');
   const cleanup=()=>{document.body.classList.remove('printing-monthly');window.removeEventListener('afterprint',cleanup)};
   window.addEventListener('afterprint',cleanup);window.print();
