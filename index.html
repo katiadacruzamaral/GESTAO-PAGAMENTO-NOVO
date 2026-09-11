@@ -68,6 +68,17 @@
   #monthlyPrintArea h1 { font-size: 20px; margin: 0 0 4px; }
   #monthlyPrintArea .print-meta { font-size: 11px; color: #444; margin-bottom: 14px; }
   #monthlyPrintArea table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+  #monthlyPrintArea .monthly-print-sheet { table-layout: fixed; }
+  #monthlyPrintArea .monthly-print-sheet th:first-child, #monthlyPrintArea .monthly-print-sheet td:first-child { width: 22%; }
+  #monthlyPrintArea .monthly-print-sheet th:not(:first-child) { width: auto; }
+  #monthlyPrintArea .monthly-print-sheet th small, #monthlyPrintArea .monthly-print-sheet td small { display: block; font-size: 8px; font-weight: normal; margin-top: 2px; }
+  #monthlyPrintArea .monthly-print-sheet .sheet-cell { text-align: right; vertical-align: top; }
+  #monthlyPrintArea .monthly-print-sheet .sheet-cell .sheet-calculated { display: block; margin-top: 3px; font-size: 9px; font-weight: 700; }
+  #monthlyPrintArea .monthly-print-sheet .sheet-label { font-weight: 600; }
+  #monthlyPrintArea .monthly-print-sheet .section-row td { background: #dce6f1 !important; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+  #monthlyPrintArea .monthly-print-sheet .subtotal-row td { background: #f3f6f9 !important; font-weight: 700; }
+  #monthlyPrintArea .monthly-print-sheet .total-row td { background: #d7efe8 !important; font-size: 11px; font-weight: 700; }
+
   #monthlyPrintArea th, #monthlyPrintArea td { border: 1px solid #999; padding: 5px 6px; text-align: left; vertical-align: top; }
   #monthlyPrintArea th { background: #e9eef5 !important; font-weight: 700; }
   #monthlyPrintArea td.value, #monthlyPrintArea td.base { text-align: right; white-space: nowrap; }
@@ -287,16 +298,36 @@ function renderMonthlyBoard(){
 }
 function printEscape(value){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function printMonthlyEntries(){
-  const list=data.entries.filter(x=>samePeriod(x)).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.employee||'').localeCompare(String(b.employee||''),'pt-BR')||String(a.branch||'').localeCompare(String(b.branch||''),'pt-BR'));
-  const kindLabel=x=>entryKind(x)==='hours'?'Receita / horas':entryKind(x)==='addition'?'Receita':'Despesa / desconto';
-  const detailLabel=x=>entryKind(x)==='hours'?(x.classType||'Horas'):(x.detail||'Sem categoria');
-  const baseLabel=x=>entryKind(x)==='hours'?(parseHours(x.hours).toLocaleString('pt-BR',{minimumFractionDigits:2})+' h'):(x.amount!==undefined&&String(x.amount).trim()!==''?money(parseMoney(x.amount)):'Automático');
-  const rows=list.map(x=>{const kind=entryKind(x), isDiscount=kind==='discount', detail=detailLabel(x), value=calculatedValue(x);return `<tr><td>${printEscape(x.date?new Date(x.date+'T00:00:00').toLocaleDateString('pt-BR'):'Não informada')}</td><td>${printEscape(x.employee||'Não informado')}</td><td>${printEscape(x.branch||'Não informada')}</td><td>${printEscape(kindLabel(x))}</td><td>${printEscape(detail)}</td><td class="base">${printEscape(baseLabel(x))}</td><td class="value ${isDiscount?'negative':'positive'}">${isDiscount?'− ':''}${money(value)}</td><td>${printEscape(x.note||'—')}</td></tr>`}).join('');
-  const totalEntries=list.filter(x=>entryKind(x)!=='discount').reduce((sum,x)=>sum+calculatedValue(x),0), totalDiscounts=list.filter(x=>entryKind(x)==='discount').reduce((sum,x)=>sum+calculatedValue(x),0), result=totalEntries-totalDiscounts;
-  const categoryTotals={};list.forEach(x=>{const key=`${kindLabel(x)} — ${detailLabel(x)}`;categoryTotals[key]=(categoryTotals[key]||0)+(entryKind(x)==='discount'?-1:1)*calculatedValue(x)});
-  const categoryRows=Object.entries(categoryTotals).sort(([a],[b])=>a.localeCompare(b,'pt-BR')).map(([label,total])=>`<tr><td>${printEscape(label)}</td><td class="value ${total<0?'negative':'positive'}">${total<0?'− ':''}${money(Math.abs(total))}</td></tr>`).join('');
+  const active=monthlyEmployees();
+  const esc=printEscape;
+  const hours=data.catalogs.classes||[], additions=data.catalogs.entries||[], discounts=data.catalogs.discounts||[];
+  const findEntry=(employee,kind,label)=>data.entries.find(x=>samePeriod(x)&&x.employeeId===employee.id&&entryKind(x)===kind&&((kind==='hours'&&x.classType===label)||(kind!=='hours'&&x.detail===label)));
+  const displayCell=(employee,kind,label)=>{
+    const item=findEntry(employee,kind,label), monthlyEmployee=isMonthlyEmployee(employee), monthlyHours=kind==='hours'&&monthlyEmployee;
+    const salaryMensalista=kind==='addition'&&isMonthlySalaryLabel(label), dsr=kind==='addition'&&isDsr(label), dsrCommission=kind==='addition'&&isDsrCommission(label), autoInss=kind==='discount'&&String(label).trim().toUpperCase()==='INSS';
+    const raw=monthlyHours?'':(salaryMensalista?monthlySalaryValue(employee,item):(kind==='hours'?(item?.hours||''):(item?.amount||'')));
+    const rate=kind==='hours'&&!monthlyHours?applicableSalary(employee.name,label):0;
+    const calculated=kind==='hours'?parseHours(raw)*rate:autoInss?inssValue(employee.id):dsr?dsrValue(employee.id):dsrCommission?dsrCommissionValue(employee.id):parseMoney(raw);
+    const signed=kind==='discount'?-calculated:calculated;
+    const shown=kind==='hours'?(parseHours(raw)?parseHours(raw).toLocaleString('pt-BR',{minimumFractionDigits:1})+' h':'—'):(calculated?' '+money(calculated):'—');
+    const date=item?.date?new Date(item.date+'T00:00:00').toLocaleDateString('pt-BR'):'';
+    const note=item?.note||'';
+    return `<td class="sheet-cell ${kind==='discount'?'negative':''}"><strong>${esc(shown)}</strong>${kind==='hours'&&rate?`<small>${money(rate)} / h</small>`:''}${date?`<small>Data: ${esc(date)}</small>`:''}${note?`<small>${esc(note)}</small>`:''}<span class="sheet-calculated">${money(signed)}</span></td>`;
+  };
+  const row=(label,kind)=>`<tr><td class="sheet-label">${esc(label)}</td>${active.map(e=>displayCell(e,kind,label)).join('')}</tr>`;
+  const section=title=>`<tr class="section-row"><td colspan="${active.length+1}">${esc(title)}</td></tr>`;
+  const header=`<thead><tr><th>Descrição</th>${active.map(e=>`<th><strong>${esc(e.name)}</strong><small>Cargo: ${esc(roleForMonth(e)||'—')}<br>Salário: ${money(parseMoney(data.catalogs.roleSalaries[roleForMonth(e)]||0))}</small></th>`).join('')}</tr></thead>`;
+  let body=section('Horas trabalhadas');
+  if(hours.includes('Aula Turma')) body+=row('Hora turma','hours');
+  if(hours.includes('Monitoria')) body+=row('Hora monitoria','hours');
+  hours.filter(x=>x!=='Aula Turma'&&x!=='Monitoria').forEach(x=>body+=row(x,'hours'));
+  body+=`<tr class="subtotal-row"><td>Valor total das horas trabalhadas</td>${active.map(e=>`<td>${money(hoursRemuneration(e.id))}</td>`).join('')}</tr>`;
+  body+=section('Lançamentos'); additions.forEach(x=>body+=row(x,'addition'));
+  body+=`<tr class="subtotal-row"><td>Salário bruto</td>${active.map(e=>`<td>${money(grossSalary(e.id))}</td>`).join('')}</tr>`;
+  body+=section('Descontos'); discounts.forEach(x=>body+=row(x,'discount'));
+  body+=`<tr class="total-row"><td>Total</td>${active.map(e=>`<td>${money(monthlyEmployeesTotal(e.id))}</td>`).join('')}</tr>`;
   const area=document.getElementById('monthlyPrintArea');
-  area.innerHTML=`<h1>Relatório detalhado de lançamentos mensais</h1><div class="print-meta"><strong>Período:</strong> ${printEscape(months[data.month])} / ${Number(data.year)||2026} &nbsp; | &nbsp; <strong>Filial selecionada:</strong> ${printEscape(data.activeBranch||'Todas')} &nbsp; | &nbsp; <strong>Emissão:</strong> ${new Date().toLocaleString('pt-BR')}<br><strong>Critério:</strong> todos os lançamentos cadastrados no período selecionado</div><table class="print-entries"><thead><tr><th>Data</th><th>Funcionário</th><th>Filial</th><th>Tipo</th><th>Categoria / detalhe</th><th>Base / quantidade</th><th>Valor calculado</th><th>Observação</th></tr></thead><tbody>${rows||'<tr><td colspan="8">Nenhum lançamento registrado no período.</td></tr>'}</tbody></table><h2 class="print-section-title">Totais por categoria</h2><table class="print-category"><thead><tr><th>Tipo e categoria</th><th>Total</th></tr></thead><tbody>${categoryRows||'<tr><td colspan="2">Nenhuma categoria no período.</td></tr>'}</tbody></table><div class="print-summary"><div><strong>Receitas / horas:</strong><br>${money(totalEntries)}</div><div><strong>Despesas / descontos:</strong><br>${money(totalDiscounts)}</div><div><strong>Resultado líquido:</strong><br>${money(result)}</div></div>`;
+  area.innerHTML=`<h1>Lançamentos mensais</h1><div class="print-meta"><strong>Período:</strong> ${esc(months[data.month])} / ${Number(data.year)||2026} &nbsp; | &nbsp; <strong>Filial:</strong> ${esc(data.activeBranch||'Todas')} &nbsp; | &nbsp; <strong>Emissão:</strong> ${new Date().toLocaleString('pt-BR')}<br><strong>Critério:</strong> todos os tipos cadastrados na página de lançamento</div><table class="monthly-print-sheet">${header}<tbody>${body||`<tr><td colspan="${active.length+1}">Nenhum funcionário disponível para este mês.</td></tr>`}</tbody></table>`;
   document.body.classList.add('printing-monthly');
   const cleanup=()=>{document.body.classList.remove('printing-monthly');window.removeEventListener('afterprint',cleanup)};
   window.addEventListener('afterprint',cleanup);window.print();
