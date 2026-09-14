@@ -11,6 +11,10 @@ Aplicação web estática em português para controle de funcionários, lançame
 - `migration-sales.json`: roteiro de migração do armazenamento local.
 - `vercel.json`: configurações básicas de publicação.
 
+## Impressão dos lançamentos mensais
+
+Na tela **Lançamentos mensais**, selecione o ano e o mês desejados e clique em **Imprimir lançamentos do mês**. O relatório de impressão reúne os lançamentos do período com data, funcionário, filial, tipo, categoria/detalhe, valor e observação, além dos totais de receitas/horas, despesas/descontos e resultado do mês. O layout é otimizado para papel A4 em orientação paisagem e não exibe os controles da aplicação na impressão.
+
 ## Configuração do Supabase
 
 1. Abra o projeto `https://wvtclyiaxqbrqghsnjou.supabase.co`.
